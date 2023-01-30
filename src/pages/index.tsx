@@ -1,28 +1,43 @@
 import {
+	ActionIcon,
 	Anchor,
 	Box,
 	Button,
 	Card,
+	Code,
 	Container,
+	Image,
 	LoadingOverlay,
+	Tooltip as MantineTooltip,
+	Modal,
+	NumberInput,
+	Skeleton,
+	Slider,
 	Text,
 	TextInput,
+	ThemeIcon,
 	Title,
 	useMantineTheme,
 } from "@mantine/core";
-import { CartesianGrid, Legend, Line, Tooltip, XAxis } from "recharts";
-import { FormattedStats, formatStats } from "@/utils/formatting";
 import {
-	getFaceitID,
-	getMatchHistory,
-	getMatchStats,
-	getPlayerStats,
-} from "@/utils/faceit";
+	CartesianGrid,
+	Legend,
+	Line,
+	ResponsiveContainer,
+	Tooltip,
+	XAxis,
+	YAxis,
+} from "recharts";
+import { FormattedStats, formatStats } from "@/utils/formatting";
+import { IconHelp, IconSettings } from "@tabler/icons-react";
+import { User, getStats, getStatus, getUser } from "@/utils/faceit";
+import { useLocalStorage, useMediaQuery } from "@mantine/hooks";
 
 import Head from "next/head";
+import Twemoji from "@/components/Twemoji";
 import dynamic from "next/dynamic";
+import { getFlagEmoji } from "@/utils/flags";
 import { showNotification } from "@mantine/notifications";
-import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
 
 const LineChart = dynamic(
@@ -36,23 +51,35 @@ const Home = () => {
 	const theme = useMantineTheme();
 	const [loading, setLoading] = useState(false);
 	const [username, setUsername] = useState("");
+	const [faceitUser, setFaceitUser] = useState<User | null>(null);
+	const [faceitClientToken, setFaceitClientToken] = useLocalStorage({
+		key: "faceitClientToken",
+		defaultValue: "",
+		getInitialValueInEffect: false,
+	});
+	const [askForToken, setAskForToken] = useState(!faceitClientToken);
 	const [playerStats, setPlayerStats] = useState<FormattedStats[]>();
+	const [last20Stats, setLast20Stats] = useState<{
+		winRate: number;
+		averageKills: number;
+		averageHSPerc: number;
+		averageKDRatio: number;
+		averageKRRatio: number;
+	}>();
+	const [matches, setMatches] = useState(20);
+
 	const search = async () => {
 		setPlayerStats([]);
 		setLoading(true);
-		const faceitID = await getFaceitID(username);
-		if (faceitID) {
-			const stats = await getPlayerStats(faceitID);
-			console.log(stats);
-			const matches = await getMatchHistory(faceitID, 20);
-			console.log(matches);
-			for (let match of matches) {
-				const matchStats = await getMatchStats(match.match_id);
-				const formattedStats = formatStats(matchStats, faceitID);
-				if (formattedStats)
-					setPlayerStats((prev) => [...(prev || []), ...formattedStats]);
-			}
+		if (!faceitClientToken) {
+			setAskForToken(true);
 			setLoading(false);
+			return;
+		}
+		const faceitUser = await getUser(username, faceitClientToken);
+		console.log(faceitUser);
+		if (faceitUser) {
+			setFaceitUser(faceitUser);
 		} else {
 			showNotification({
 				title: "Error",
@@ -60,7 +87,26 @@ const Home = () => {
 				color: "red",
 			});
 			setLoading(false);
+			return;
 		}
+		const stats = await getStats(faceitUser.id, faceitClientToken, matches);
+		console.log(stats);
+		const winRate = stats.filter((e) => e.won).length / stats.length;
+		const averageKills = stats.reduce((a, b) => a + b.kills, 0) / stats.length;
+		const averageHSPerc =
+			stats.reduce((a, b) => a + b.hs_percentage, 0) / stats.length;
+		const averageKDRatio = stats.reduce((a, b) => a + b.kdr, 0) / stats.length;
+		const averageKRRatio = stats.reduce((a, b) => a + b.krr, 0) / stats.length;
+		setLast20Stats({
+			winRate,
+			averageKills,
+			averageHSPerc,
+			averageKDRatio,
+			averageKRRatio,
+		});
+		const formattedStats = formatStats(stats);
+		setPlayerStats(formattedStats);
+		setLoading(false);
 	};
 
 	const isBigScreen = useMediaQuery("(min-width: 768px)");
@@ -83,64 +129,337 @@ const Home = () => {
 				/>
 			</Head>
 			<main>
+				<Modal
+					opened={askForToken}
+					onClose={() => setAskForToken(false)}
+					title={<Title>Enter your FACEIT client token</Title>}
+					size={isBigScreen ? "lg" : "md"}
+				>
+					<TextInput
+						label={<Text mb={5}>FACEIT token</Text>}
+						placeholder="Token"
+						sx={{
+							width: "100%",
+						}}
+						value={faceitClientToken}
+						onChange={(e) => setFaceitClientToken(e.currentTarget.value)}
+						size="md"
+						rightSection={
+							<MantineTooltip
+								label={
+									<Text>
+										You can find your token by logging in to{" "}
+										<Anchor href="https://www.faceit.com/en" target="_blank">
+											FACEIT
+										</Anchor>{" "}
+										and opening the developer tools (F12) and going to the{" "}
+										<Code>Storage</Code> tab. Then click on <Code>Cookies</Code>
+										, select
+										<Code>https://www.faceit.com</Code> and copy the{" "}
+										<Code>t</Code> value.
+									</Text>
+								}
+								multiline
+								width={300}
+								closeDelay={1000}
+								openDelay={500}
+							>
+								<IconHelp
+									size={20}
+									color={theme.colors.gray[7]}
+									style={{ cursor: "pointer" }}
+								/>
+							</MantineTooltip>
+						}
+					/>
+					<Button
+						onClick={() => {
+							getStatus(faceitClientToken).then((res) => {
+								if (res) {
+									setAskForToken(false);
+									setFaceitClientToken(faceitClientToken);
+								} else {
+									showNotification({
+										title: "Error",
+										message: "Invalid token",
+										color: "red",
+									});
+								}
+							});
+						}}
+						sx={{
+							marginTop: "1rem",
+						}}
+						size="md"
+					>
+						Ok
+					</Button>
+				</Modal>
 				<Container
 					sx={{
 						display: "flex",
 						justifyContent: "center",
 						flexDirection: "column",
 					}}
+					mb={40}
 				>
-					<Title
-						sx={{
-							fontSize: "5rem",
-						}}
-					>
-						<Text
-							component="span"
-							sx={{
-								fontFamily: "Play",
-								fontWeight: 700,
-							}}
-							variant="gradient"
-							gradient={{
-								from: "orange",
-								to: "red",
-							}}
-						>
-							FACEIT
-						</Text>{" "}
-						Charts
-					</Title>
 					<Box
 						sx={{
 							display: "flex",
-							flexDirection: "column",
+							alignItems: "center",
+							flexDirection: "row",
 							gap: "1rem",
 						}}
 					>
-						<TextInput
-							label={<Text mb={5}>FACEIT or Steam Username</Text>}
-							placeholder="Username"
+						<Title
 							sx={{
-								width: "100%",
+								fontSize: "5rem",
+								flexGrow: 1,
 							}}
-							size="lg"
-							value={username}
-							onChange={(e) => setUsername(e.currentTarget.value)}
-							radius="md"
-						/>
-						<Button
-							size="lg"
-							onClick={search}
-							radius="md"
-							sx={{
-								width: "100%",
-							}}
-							variant="filled"
 						>
-							Search
-						</Button>
+							<Text
+								component="span"
+								sx={{
+									fontFamily: "Play",
+									fontWeight: 700,
+								}}
+								variant="gradient"
+								gradient={{
+									from: "orange",
+									to: "red",
+								}}
+							>
+								FACEIT
+							</Text>{" "}
+							Charts
+						</Title>
+						<ActionIcon onClick={() => setAskForToken(true)}>
+							<ThemeIcon variant="light" size={40} color="gray">
+								<IconSettings size={30} style={{ cursor: "pointer" }} />
+							</ThemeIcon>
+						</ActionIcon>
 					</Box>
+					<form
+						onSubmit={(e) => {
+							e.preventDefault();
+							search();
+						}}
+					>
+						<Box
+							sx={{
+								display: "flex",
+								flexDirection: "row",
+								gap: "1rem",
+								alignItems: "center",
+							}}
+							my={20}
+						>
+							<Box
+								sx={{
+									display: "flex",
+									flexDirection: "column",
+									gap: "1rem",
+									flexGrow: 1,
+								}}
+							>
+								<TextInput
+									label={<Text mb={5}>FACEIT Username</Text>}
+									placeholder="Username"
+									sx={{
+										width: "100%",
+									}}
+									size="lg"
+									value={username}
+									onChange={(e) => setUsername(e.currentTarget.value)}
+									radius="md"
+									onSubmit={search}
+								/>
+								<Button
+									size="lg"
+									type="submit"
+									radius="md"
+									sx={{
+										width: "100%",
+									}}
+									variant="filled"
+								>
+									Search
+								</Button>
+								<NumberInput
+									label={<Text mb={5}>Number of matches</Text>}
+									placeholder="Number of matches"
+									sx={{
+										width: "100%",
+									}}
+									size="lg"
+									value={matches}
+									onChange={(e) => e && setMatches(e)}
+									radius="md"
+									onSubmit={search}
+								/>
+							</Box>
+							<Card
+								sx={{
+									width: 500,
+									height: 200,
+									display: "flex",
+								}}
+								radius="md"
+								p="md"
+							>
+								<Box
+									sx={{
+										display: "flex",
+										flexDirection: "row",
+										gap: "1rem",
+									}}
+								>
+									{!faceitUser ? (
+										<Skeleton
+											width={120}
+											height={120}
+											radius="md"
+											animate={loading}
+											sx={{
+												alignSelf: "center",
+											}}
+										/>
+									) : (
+										<Image
+											src={faceitUser?.avatar}
+											width={120}
+											height={120}
+											alt="Faceit user avatar"
+											radius="md"
+											sx={{
+												alignSelf: "center",
+											}}
+										/>
+									)}
+									<Box
+										sx={{
+											display: "flex",
+											flexDirection: "column",
+											gap: "1rem",
+										}}
+										ml={5}
+									>
+										<Text size={30} weight={700}>
+											{!faceitUser ? (
+												<>
+													<Skeleton width={100} height={25} animate={loading} />
+												</>
+											) : (
+												<>
+													{faceitUser?.nickname}{" "}
+													<Twemoji emoji={getFlagEmoji(faceitUser?.country)} />
+												</>
+											)}
+										</Text>
+										<Box
+											sx={{
+												display: "flex",
+												flexDirection: "row",
+												gap: "1rem",
+												alignItems: "center",
+											}}
+										>
+											{!faceitUser ? (
+												<>
+													<Skeleton
+														width="2.5rem"
+														height="2.5rem"
+														animate={loading}
+														circle
+													/>
+													<Skeleton width={100} height={25} animate={loading} />
+												</>
+											) : (
+												<>
+													<Image
+														src={`/faceit/${faceitUser?.games.csgo.skill_level}.svg`}
+														width="2.5rem"
+														height="2.5rem"
+													/>
+													<Text size={20} weight={700}>
+														{faceitUser?.games.csgo.faceit_elo} Elo
+													</Text>
+												</>
+											)}
+										</Box>
+										<Box
+											sx={{
+												display: "flex",
+												flexDirection: "row",
+												gap: "1rem",
+											}}
+										>
+											<Text size={17} weight={700}>
+												{!last20Stats ? (
+													<>
+														<Skeleton
+															width={60}
+															height={20}
+															animate={loading}
+															mb={5}
+														/>{" "}
+														Winrate
+													</>
+												) : (
+													<>{last20Stats?.winRate * 100}% Winrate</>
+												)}
+											</Text>
+											<Text size={17} weight={700}>
+												{!last20Stats ? (
+													<>
+														<Skeleton
+															width={60}
+															height={20}
+															animate={loading}
+															mb={5}
+														/>{" "}
+														K/D
+													</>
+												) : (
+													<>{last20Stats?.averageKDRatio.toFixed(2)} K/D</>
+												)}
+											</Text>
+											<Text size={17} weight={700}>
+												{!last20Stats ? (
+													<>
+														<Skeleton
+															width={60}
+															height={20}
+															animate={loading}
+															mb={5}
+														/>{" "}
+														HS
+													</>
+												) : (
+													<>{last20Stats?.averageHSPerc}% HS</>
+												)}
+											</Text>
+											<Text size={17} weight={700}>
+												{!last20Stats ? (
+													<>
+														<Skeleton
+															width={60}
+															height={20}
+															animate={loading}
+															mb={5}
+														/>{" "}
+														K/R
+													</>
+												) : (
+													<>{last20Stats?.averageKRRatio.toFixed(2)} K/R</>
+												)}
+											</Text>
+										</Box>
+									</Box>
+								</Box>
+							</Card>
+						</Box>
+					</form>
 
 					<Card
 						mt={20}
@@ -149,8 +468,8 @@ const Home = () => {
 							justifyContent: "center",
 							alignItems: "center",
 							flexDirection: "column",
-							height: "100%",
-							width: "fit-content",
+							height: isBigScreen ? 500 : "100vh",
+							width: "100%",
 							position: "relative",
 							filter:
 								!loading && (playerStats?.length === 0 || !playerStats)
@@ -167,202 +486,213 @@ const Home = () => {
 							overlayColor={theme.colors.gray[9]}
 							overlayOpacity={0.8}
 						/>
-						<LineChart
-							width={isBigScreen ? 900 : 300}
-							height={isBigScreen ? 500 : 150}
-							data={playerStats
-								?.map((stat, index) => ({
-									...stat,
-									index: index + 1,
-								}))
-								.reverse()}
-							margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
-							innerRadius={isBigScreen ? 0 : 50}
-						>
-							<XAxis dataKey="index" stroke={theme.colors.gray[0]} />
-							<CartesianGrid
-								stroke={theme.colors.gray[7]}
-								strokeDasharray="3 3"
-							/>
-							<Tooltip
-								contentStyle={{
-									backgroundColor: theme.colors.gray[9],
-									borderRadius: "0.5rem",
-									border: "none",
-								}}
-								labelFormatter={(value: string) => {
-									if (playerStats === undefined) return null;
-									return `Match #${value}`;
-								}}
-								formatter={(value: string, name: string) => {
-									if (playerStats === undefined) return ["", ""];
-									return [
-										value,
-										name.slice(0, 1).toUpperCase() + name.slice(1),
-									];
-								}}
-							/>
-							<Line
-								type="monotone"
-								dataKey="kills"
-								stroke={theme.colors.orange[5]}
-								strokeWidth={3}
-								activeDot={{ r: 8 }}
-								dot={false}
-								label={{
-									position: "top",
-									formatter: (value: string) => {
+						<ResponsiveContainer width="100%" height="100%">
+							<LineChart
+								data={playerStats
+									?.map((stat, index) => ({
+										...stat,
+										index: index + 1,
+									}))
+									.reverse()}
+								margin={{ top: 20, right: 20, left: -20, bottom: 10 }}
+								innerRadius={isBigScreen ? 0 : 50}
+							>
+								{/* <Brush
+									dataKey="index"
+									travellerWidth={10}
+									startIndex={(playerStats?.length || 0) - 20}
+									style={{
+										backgroundColor: theme.colors.gray[9],
+										borderRadius: "0.5rem",
+										border: "none",
+									}}
+								/> */}
+								<XAxis dataKey="index" stroke={theme.colors.gray[0]} />
+								<YAxis stroke={theme.colors.gray[0]} />
+								<CartesianGrid
+									stroke={theme.colors.gray[7]}
+									strokeDasharray="3 3"
+								/>
+								<Tooltip
+									contentStyle={{
+										backgroundColor: theme.colors.gray[9],
+										borderRadius: "0.5rem",
+										border: "none",
+									}}
+									labelFormatter={(value: string) => {
 										if (playerStats === undefined) return null;
-										if (
-											parseInt(value) ===
-												Math.max.apply(
-													Math,
-													playerStats.map((stat) => stat.kills),
-												) ||
-											parseInt(value) ===
-												Math.min.apply(
-													Math,
-													playerStats.map((stat) => stat.kills),
-												)
-										) {
-											return value;
-										}
+										return `Match #${value}`;
+									}}
+									formatter={(value: string, name: string) => {
+										if (playerStats === undefined) return ["", ""];
+										return [
+											value,
+											name.slice(0, 1).toUpperCase() + name.slice(1),
+										];
+									}}
+								/>
+								<Line
+									type="monotone"
+									dataKey="kills"
+									stroke={theme.colors.orange[5]}
+									strokeWidth={3}
+									activeDot={{ r: 8 }}
+									dot={false}
+									label={{
+										position: "top",
+										formatter: (value: string) => {
+											if (playerStats === undefined) return null;
+											if (
+												parseInt(value) ===
+													Math.max.apply(
+														Math,
+														playerStats.map((stat) => stat.kills),
+													) ||
+												parseInt(value) ===
+													Math.min.apply(
+														Math,
+														playerStats.map((stat) => stat.kills),
+													)
+											) {
+												return value;
+											}
 
-										return null;
-									},
-									fill: theme.colors.orange[3],
-								}}
-							/>
-							<Line
-								type="monotone"
-								dataKey="deaths"
-								stroke={theme.colors.red[5]}
-								strokeWidth={3}
-								activeDot={{ r: 8 }}
-								dot={false}
-								label={{
-									position: "top",
-									formatter: (value: string) => {
-										// Check if the value is an extrema (min or max)
-										if (playerStats === undefined) return null;
-										if (
-											parseInt(value) ===
-												Math.max.apply(
-													Math,
-													playerStats.map((stat) => stat.deaths),
-												) ||
-											parseInt(value) ===
-												Math.min.apply(
-													Math,
-													playerStats.map((stat) => stat.deaths),
-												)
-										) {
-											return value;
-										}
+											return null;
+										},
+										fill: theme.colors.orange[3],
+									}}
+								/>
+								<Line
+									type="monotone"
+									dataKey="deaths"
+									stroke={theme.colors.red[5]}
+									strokeWidth={3}
+									activeDot={{ r: 8 }}
+									dot={false}
+									label={{
+										position: "top",
+										formatter: (value: string) => {
+											// Check if the value is an extrema (min or max)
+											if (playerStats === undefined) return null;
+											if (
+												parseInt(value) ===
+													Math.max.apply(
+														Math,
+														playerStats.map((stat) => stat.deaths),
+													) ||
+												parseInt(value) ===
+													Math.min.apply(
+														Math,
+														playerStats.map((stat) => stat.deaths),
+													)
+											) {
+												return value;
+											}
 
-										return null;
-									},
-									fill: theme.colors.red[3],
-								}}
-							/>
-							<Line
-								type="monotone"
-								dataKey="assists"
-								stroke={theme.colors.blue[5]}
-								strokeWidth={3}
-								activeDot={{ r: 8 }}
-								dot={false}
-								label={{
-									position: "top",
-									formatter: (value: string) => {
-										// Check if the value is an extrema (min or max)
-										if (playerStats === undefined) return null;
-										if (
-											parseInt(value) ===
-												Math.max.apply(
-													Math,
-													playerStats.map((stat) => stat.assists),
-												) ||
-											parseInt(value) ===
-												Math.min.apply(
-													Math,
-													playerStats.map((stat) => stat.assists),
-												)
-										) {
-											return value;
-										}
+											return null;
+										},
+										fill: theme.colors.red[3],
+									}}
+								/>
+								<Line
+									type="monotone"
+									dataKey="assists"
+									stroke={theme.colors.blue[5]}
+									strokeWidth={3}
+									activeDot={{ r: 8 }}
+									dot={false}
+									label={{
+										position: "top",
+										formatter: (value: string) => {
+											// Check if the value is an extrema (min or max)
+											if (playerStats === undefined) return null;
+											if (
+												parseInt(value) ===
+													Math.max.apply(
+														Math,
+														playerStats.map((stat) => stat.assists),
+													) ||
+												parseInt(value) ===
+													Math.min.apply(
+														Math,
+														playerStats.map((stat) => stat.assists),
+													)
+											) {
+												return value;
+											}
 
-										return null;
-									},
-									fill: theme.colors.blue[3],
-								}}
-							/>
-							<Line
-								type="monotone"
-								dataKey="headshots"
-								stroke={theme.colors.green[5]}
-								strokeWidth={3}
-								activeDot={{ r: 8 }}
-								dot={false}
-								label={{
-									position: "top",
-									formatter: (value: string) => {
-										// Check if the value is an extrema (min or max)
-										if (playerStats === undefined) return null;
-										if (
-											parseInt(value) ===
-												Math.max.apply(
-													Math,
-													playerStats.map((stat) => stat.headshots),
-												) ||
-											parseInt(value) ===
-												Math.min.apply(
-													Math,
-													playerStats.map((stat) => stat.headshots),
-												)
-										) {
-											return value;
-										}
+											return null;
+										},
+										fill: theme.colors.blue[3],
+									}}
+								/>
+								<Line
+									type="monotone"
+									dataKey="headshots"
+									stroke={theme.colors.green[5]}
+									strokeWidth={3}
+									activeDot={{ r: 8 }}
+									dot={false}
+									label={{
+										position: "top",
+										formatter: (value: string) => {
+											// Check if the value is an extrema (min or max)
+											if (playerStats === undefined) return null;
+											if (
+												parseInt(value) ===
+													Math.max.apply(
+														Math,
+														playerStats.map((stat) => stat.headshots),
+													) ||
+												parseInt(value) ===
+													Math.min.apply(
+														Math,
+														playerStats.map((stat) => stat.headshots),
+													)
+											) {
+												return value;
+											}
 
-										return null;
-									},
-									fill: theme.colors.green[3],
-								}}
-							/>
-							<Legend
-								verticalAlign="bottom"
-								align="center"
-								layout="horizontal"
-								iconType="circle"
-								iconSize={10}
-								payload={[
-									{
-										value: "Kills",
-										type: "circle",
-										id: "kills",
-										color: theme.colors.orange[5],
-									},
-									{
-										value: "Deaths",
-										type: "circle",
-										id: "deaths",
-										color: theme.colors.red[5],
-									},
-									{
-										value: "Assists",
-										type: "circle",
-										id: "assists",
-										color: theme.colors.blue[5],
-									},
-									{
-										value: "Headshots",
-										type: "circle",
-										id: "headshots",
-										color: theme.colors.green[5],
-									},
-								]}
-							/>
-						</LineChart>
+											return null;
+										},
+										fill: theme.colors.green[3],
+									}}
+								/>
+								<Legend
+									verticalAlign="bottom"
+									align="center"
+									layout="horizontal"
+									iconType="circle"
+									iconSize={10}
+									payload={[
+										{
+											value: "Kills",
+											type: "circle",
+											id: "kills",
+											color: theme.colors.orange[5],
+										},
+										{
+											value: "Deaths",
+											type: "circle",
+											id: "deaths",
+											color: theme.colors.red[5],
+										},
+										{
+											value: "Assists",
+											type: "circle",
+											id: "assists",
+											color: theme.colors.blue[5],
+										},
+										{
+											value: "Headshots",
+											type: "circle",
+											id: "headshots",
+											color: theme.colors.green[5],
+										},
+									]}
+								/>
+							</LineChart>
+						</ResponsiveContainer>
 					</Card>
 
 					<Box mt={10}>

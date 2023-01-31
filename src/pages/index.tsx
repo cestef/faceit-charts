@@ -1,4 +1,5 @@
 import {
+	Accordion,
 	ActionIcon,
 	Anchor,
 	Box,
@@ -12,7 +13,6 @@ import {
 	Modal,
 	NumberInput,
 	Skeleton,
-	Slider,
 	Text,
 	TextInput,
 	ThemeIcon,
@@ -52,6 +52,7 @@ const Home = () => {
 	const [loading, setLoading] = useState(false);
 	const [username, setUsername] = useState("");
 	const [faceitUser, setFaceitUser] = useState<User | null>(null);
+	const [FAQOpen, setFAQOpen] = useState(false);
 	const [faceitClientToken, setFaceitClientToken] = useLocalStorage({
 		key: "faceitClientToken",
 		defaultValue: "",
@@ -215,6 +216,60 @@ const Home = () => {
 						Ok
 					</Button>
 				</Modal>
+				<Modal
+					opened={FAQOpen}
+					onClose={() => setFAQOpen(false)}
+					title={<Title>FAQ</Title>}
+					size={isBigScreen ? "lg" : "md"}
+				>
+					<Accordion defaultValue="token-usage">
+						<Accordion.Item value="token-usage">
+							<Accordion.Control>FACEIT Token</Accordion.Control>
+							<Accordion.Panel>
+								What is my token used for? <br />
+								Your FACEIT token is used to fetch your stats. <br />
+								It is only stored in your browser and is proxied through the
+								API, which is open source and can be found{" "}
+								<Anchor
+									href="https://github.com/cestef/faceit-charts"
+									target="_blank"
+								>
+									here
+								</Anchor>
+								. <br />
+							</Accordion.Panel>
+						</Accordion.Item>
+						<Accordion.Item value="token-get">
+							<Accordion.Control>How do I get my token?</Accordion.Control>
+							<Accordion.Panel>
+								You can find your token by logging in to{" "}
+								<Anchor href="https://www.faceit.com/en" target="_blank">
+									FACEIT
+								</Anchor>{" "}
+								and opening the developer tools (F12) and going to the{" "}
+								<Code>Storage</Code> tab. Then click on <Code>Cookies</Code>,
+								select
+								<Code>https://www.faceit.com</Code> and copy the <Code>t</Code>{" "}
+								value.
+							</Accordion.Panel>
+						</Accordion.Item>
+						<Accordion.Item value="token-why">
+							<Accordion.Control>
+								Why do I need to provide my token ?
+							</Accordion.Control>
+							<Accordion.Panel>
+								The production FACEIT API does not allow{" "}
+								<Anchor href="https://developer.mozilla.org/fr/docs/Web/HTTP/CORS">
+									CORS
+								</Anchor>{" "}
+								requests, and requires authentication for every endpoint, so it
+								is not possible to fetch your stats from the client. <br />
+								To get around this, the API is hosted on a server and the token
+								is proxied through it. <br />
+							</Accordion.Panel>
+						</Accordion.Item>
+					</Accordion>
+				</Modal>
 				<Container
 					sx={{
 						display: "flex",
@@ -262,6 +317,8 @@ const Home = () => {
 					<form
 						onSubmit={(e) => {
 							e.preventDefault();
+							if (!faceitClientToken) return setAskForToken(true);
+							else if (!username) return;
 							search();
 						}}
 					>
@@ -755,7 +812,14 @@ const Home = () => {
 						</ResponsiveContainer>
 					</Card>
 
-					<Box mt={10}>
+					<Box
+						mt={10}
+						sx={{
+							display: "flex",
+							flexDirection: "row",
+							gap: 5,
+						}}
+					>
 						<Text component="span">Powered by</Text>{" "}
 						<Anchor
 							href="https://faceit.com/en"
@@ -764,6 +828,8 @@ const Home = () => {
 						>
 							FACEIT
 						</Anchor>
+						{" | "}
+						<Anchor onClick={() => setFAQOpen(true)}>FAQ</Anchor>
 					</Box>
 				</Container>
 			</main>

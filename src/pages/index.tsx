@@ -406,7 +406,9 @@ const Home = () => {
 														Winrate
 													</>
 												) : (
-													<>{last20Stats?.winRate * 100}% Winrate</>
+													<>
+														{(last20Stats?.winRate * 100).toFixed(2)}% Winrate
+													</>
 												)}
 											</Text>
 											<Text size={17} weight={700}>
@@ -436,7 +438,7 @@ const Home = () => {
 														HS
 													</>
 												) : (
-													<>{last20Stats?.averageHSPerc}% HS</>
+													<>{last20Stats?.averageHSPerc.toFixed(2)}% HS</>
 												)}
 											</Text>
 											<Text size={17} weight={700}>

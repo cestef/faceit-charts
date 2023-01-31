@@ -70,6 +70,8 @@ const Home = () => {
 
 	const search = async () => {
 		setPlayerStats([]);
+		setLast20Stats(undefined);
+		setFaceitUser(null);
 		setLoading(true);
 		if (!faceitClientToken) {
 			setAskForToken(true);
@@ -97,6 +99,24 @@ const Home = () => {
 			stats.reduce((a, b) => a + b.hs_percentage, 0) / stats.length;
 		const averageKDRatio = stats.reduce((a, b) => a + b.kdr, 0) / stats.length;
 		const averageKRRatio = stats.reduce((a, b) => a + b.krr, 0) / stats.length;
+		if (
+			!(
+				winRate &&
+				averageKills &&
+				averageHSPerc &&
+				averageKDRatio &&
+				averageKRRatio
+			)
+		) {
+			showNotification({
+				title: "Error",
+				message: "An error occured while fetching stats",
+				color: "red",
+			});
+			setFaceitUser(null);
+			setLoading(false);
+			return;
+		}
 		setLast20Stats({
 			winRate,
 			averageKills,
@@ -300,7 +320,7 @@ const Home = () => {
 							</Box>
 							<Card
 								sx={{
-									width: 500,
+									width: 550,
 									height: 200,
 									display: "flex",
 								}}
@@ -344,10 +364,20 @@ const Home = () => {
 										}}
 										ml={5}
 									>
-										<Text size={30} weight={700}>
+										<Text
+											size={30}
+											weight={700}
+											component={faceitUser?.nickname ? "a" : "div"}
+											href={`https://www.faceit.com/en/players/${faceitUser?.nickname}`}
+										>
 											{!faceitUser ? (
 												<>
-													<Skeleton width={100} height={25} animate={loading} />
+													<Skeleton
+														width={100}
+														height={25}
+														animate={loading}
+														mt={10}
+													/>
 												</>
 											) : (
 												<>
@@ -394,11 +424,29 @@ const Home = () => {
 												gap: "1rem",
 											}}
 										>
-											<Text size={17} weight={700}>
+											<Text size={17} weight={700} px={5}>
 												{!last20Stats ? (
 													<>
 														<Skeleton
-															width={60}
+															width={50}
+															height={20}
+															animate={loading}
+															mb={5}
+														/>{" "}
+														Kills
+													</>
+												) : (
+													<>
+														{last20Stats?.averageKills.toFixed(0)} <br />
+														Kills
+													</>
+												)}
+											</Text>
+											<Text size={17} weight={700} px={5}>
+												{!last20Stats ? (
+													<>
+														<Skeleton
+															width={50}
 															height={20}
 															animate={loading}
 															mb={5}
@@ -407,15 +455,16 @@ const Home = () => {
 													</>
 												) : (
 													<>
-														{(last20Stats?.winRate * 100).toFixed(2)}% Winrate
+														{(last20Stats?.winRate * 100).toFixed(0)}% <br />
+														Winrate
 													</>
 												)}
 											</Text>
-											<Text size={17} weight={700}>
+											<Text size={17} weight={700} px={5}>
 												{!last20Stats ? (
 													<>
 														<Skeleton
-															width={60}
+															width={50}
 															height={20}
 															animate={loading}
 															mb={5}
@@ -423,14 +472,17 @@ const Home = () => {
 														K/D
 													</>
 												) : (
-													<>{last20Stats?.averageKDRatio.toFixed(2)} K/D</>
+													<>
+														{last20Stats?.averageKDRatio.toFixed(2)} <br />
+														K/D
+													</>
 												)}
 											</Text>
-											<Text size={17} weight={700}>
+											<Text size={17} weight={700} px={5}>
 												{!last20Stats ? (
 													<>
 														<Skeleton
-															width={60}
+															width={50}
 															height={20}
 															animate={loading}
 															mb={5}
@@ -438,14 +490,17 @@ const Home = () => {
 														HS
 													</>
 												) : (
-													<>{last20Stats?.averageHSPerc.toFixed(2)}% HS</>
+													<>
+														{last20Stats?.averageHSPerc.toFixed(0)}% <br />
+														HS
+													</>
 												)}
 											</Text>
-											<Text size={17} weight={700}>
+											<Text size={17} weight={700} px={5}>
 												{!last20Stats ? (
 													<>
 														<Skeleton
-															width={60}
+															width={50}
 															height={20}
 															animate={loading}
 															mb={5}
@@ -453,7 +508,10 @@ const Home = () => {
 														K/R
 													</>
 												) : (
-													<>{last20Stats?.averageKRRatio.toFixed(2)} K/R</>
+													<>
+														{last20Stats?.averageKRRatio.toFixed(2)} <br />
+														K/R
+													</>
 												)}
 											</Text>
 										</Box>

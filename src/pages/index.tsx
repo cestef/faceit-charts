@@ -9,7 +9,7 @@ import {
 	Container,
 	Image,
 	LoadingOverlay,
-	Tooltip as MantineTooltip,
+	Tooltip as MTooltip,
 	Modal,
 	NumberInput,
 	Skeleton,
@@ -166,7 +166,7 @@ const Home = () => {
 						onChange={(e) => setFaceitClientToken(e.currentTarget.value)}
 						size="md"
 						rightSection={
-							<MantineTooltip
+							<MTooltip
 								label={
 									<Text>
 										You can find your token by logging in to{" "}
@@ -190,7 +190,7 @@ const Home = () => {
 									color={theme.colors.gray[7]}
 									style={{ cursor: "pointer" }}
 								/>
-							</MantineTooltip>
+							</MTooltip>
 						}
 					/>
 					<Button
